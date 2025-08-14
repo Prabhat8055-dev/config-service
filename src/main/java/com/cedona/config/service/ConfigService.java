@@ -15,5 +15,5 @@ public interface ConfigService {
 
     List<ApiEndpointMaster> getAllEndpoints();
 
-    RegisterApiEndpointResponse registerOrUpdateEndpoint(RegisterApiEndpointRequest request);
+    List<RegisterApiEndpointResponse> registerOrUpdateEndpoint(RegisterApiEndpointRequest request);
 }

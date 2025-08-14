@@ -20,7 +20,7 @@ public class ConfigController extends BaseController {
     @Autowired
     ConfigService configService;
 
-    @PostMapping("/create/createConfig")
+    @PostMapping("/process/createConfig")
     public CreateConfigResponse createConfig(@RequestBody CreateConfigRequest createConfigRequest) {
         CreateConfigResponse createConfigResponse=configService.createConfig(createConfigRequest);
         return createConfigResponse;
@@ -32,7 +32,7 @@ public class ConfigController extends BaseController {
     }
 
     @PostMapping("/process/registerOrUpdateEndpoint")
-    public RegisterApiEndpointResponse registerOrUpdateEndpoint(@RequestBody RegisterApiEndpointRequest request) {
+    public List<RegisterApiEndpointResponse> registerOrUpdateEndpoint(@RequestBody RegisterApiEndpointRequest request) {
         return configService.registerOrUpdateEndpoint(request);
     }
 

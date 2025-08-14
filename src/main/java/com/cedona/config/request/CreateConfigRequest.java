@@ -3,11 +3,19 @@ package com.cedona.config.request;
 
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 public class CreateConfigRequest {
 
-    private String configKey;
+    private List<ConfigList> configLists;
 
-    private String configValue;
+    @Data
+    public static class ConfigList {
+
+        private String configKey;
+
+        private String configValue;
+    }
 
 }

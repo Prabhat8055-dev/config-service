@@ -10,10 +10,11 @@ import com.cedona.config.response.CreateConfigResponse;
 import com.cedona.config.response.RegisterApiEndpointResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.ObjectUtils;
 
-import java.util.HashSet;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class ConfigServiceImpl implements ConfigService{
@@ -26,52 +27,87 @@ public class ConfigServiceImpl implements ConfigService{
 
 
     @Override
+    @Transactional
     public CreateConfigResponse createConfig(CreateConfigRequest createConfigRequest) {
 
-        ConfigDetailsMaster configDetailsMaster=new ConfigDetailsMaster();
-        configDetailsMaster.setConfigKey(createConfigRequest.getConfigKey());
-        configDetailsMaster.setConfigValue(createConfigRequest.getConfigValue());
-        configDetailsMasterRepository.save(configDetailsMaster);
+        List<String> keys = createConfigRequest.getConfigLists().stream()
+                .map(CreateConfigRequest.ConfigList::getConfigKey)
+                .toList();
 
-        CreateConfigResponse createConfigResponse=new CreateConfigResponse();
-        createConfigResponse.setStatus("Config Created");
+        Map<String, ConfigDetailsMaster> existingConfigs = configDetailsMasterRepository
+                .findByConfigKeyIn(keys)
+                .stream()
+                .collect(Collectors.toMap(ConfigDetailsMaster::getConfigKey, c -> c));
 
-        return createConfigResponse;
+        List<ConfigDetailsMaster> configsToSave = new ArrayList<>();
+
+        for (CreateConfigRequest.ConfigList configList : createConfigRequest.getConfigLists()) {
+            ConfigDetailsMaster config = existingConfigs.get(configList.getConfigKey());
+
+            if (config != null) {
+                // Update existing
+                config.setConfigValue(configList.getConfigValue());
+                configsToSave.add(config);
+            } else {
+                // Create new
+                ConfigDetailsMaster newConfig = new ConfigDetailsMaster();
+                newConfig.setConfigKey(configList.getConfigKey());
+                newConfig.setConfigValue(configList.getConfigValue());
+                configsToSave.add(newConfig);
+            }
+        }
+
+        configDetailsMasterRepository.saveAll(configsToSave);
+
+        CreateConfigResponse response = new CreateConfigResponse();
+        response.setStatus("Configs created/updated successfully");
+        return response;
     }
+
 
     public List<ApiEndpointMaster> getAllEndpoints() {
         return repository.findAll();
     }
 
-    public RegisterApiEndpointResponse registerOrUpdateEndpoint(RegisterApiEndpointRequest request) {
-        ApiEndpointMaster existingService = repository.findByServiceName(request.getServiceName()).orElse(null);
+    @Override
+    public List<RegisterApiEndpointResponse> registerOrUpdateEndpoint(RegisterApiEndpointRequest request) {
+        List<RegisterApiEndpointResponse> responses = new ArrayList<>();
 
-        if (existingService == null) {
-            ApiEndpointMaster newService = new ApiEndpointMaster();
-            newService.setServiceName(request.getServiceName());
-            newService.setBasePath(request.getBasePath());
-            newService.setEndpoints(new HashSet<>(request.getEndpoints()));
-            newService.setWildcardEndpoints(new HashSet<>(request.getWildcardEndpoints()));
+        for (RegisterApiEndpointRequest.UrlService serviceReq : request.getServices()) {
+            ApiEndpointMaster existingService = repository.findByServiceName(serviceReq.getServiceName()).orElse(null);
 
-            repository.save(newService);
+            if (existingService == null) {
+                ApiEndpointMaster newService = new ApiEndpointMaster();
+                newService.setServiceName(serviceReq.getServiceName());
+                newService.setBasePath(serviceReq.getBasePath());
+                newService.setEndpoints(new HashSet<>(Optional.ofNullable(serviceReq.getEndpoints()).orElse(Set.of())));
+                newService.setWildcardEndpoints(new HashSet<>(Optional.ofNullable(serviceReq.getWildcardEndpoints()).orElse(Set.of())));
 
-            RegisterApiEndpointResponse response = new RegisterApiEndpointResponse();
-            response.setStatus("New service registered successfully");
-            return response;
-        } else {
-            if (request.getEndpoints() != null) {
-                existingService.getEndpoints().addAll(request.getEndpoints());
+                repository.save(newService);
+
+                RegisterApiEndpointResponse resp = new RegisterApiEndpointResponse();
+                resp.setStatus("New service registered: " + serviceReq.getServiceName());
+                responses.add(resp);
+
+            } else {
+                if (serviceReq.getEndpoints() != null) {
+                    existingService.getEndpoints().addAll(serviceReq.getEndpoints());
+                }
+                if (serviceReq.getWildcardEndpoints() != null) {
+                    existingService.getWildcardEndpoints().addAll(serviceReq.getWildcardEndpoints());
+                }
+
+                repository.save(existingService);
+
+                RegisterApiEndpointResponse resp = new RegisterApiEndpointResponse();
+                resp.setStatus("Endpoints updated for service: " + serviceReq.getServiceName());
+                responses.add(resp);
             }
-            if (request.getWildcardEndpoints() != null) {
-                existingService.getWildcardEndpoints().addAll(request.getWildcardEndpoints());
-            }
-
-            repository.save(existingService);
-
-            RegisterApiEndpointResponse response = new RegisterApiEndpointResponse();
-            response.setStatus("Endpoints added to existing service");
-            return response;
         }
+
+        return responses;
     }
 
+
 }
+
